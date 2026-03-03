@@ -67,34 +67,89 @@ function wLabel(k){
 }
 
 // ── Drive API (token passed as arg, never stored in closure) ──
-async function dFind(tok,name){
-  const q=encodeURIComponent("name='"+name+"' and spaces='appDataFolder' and trashed=false");
-  const r=await fetch("https://www.googleapis.com/drive/v3/files?q="+q+"&spaces=appDataFolder&fields=files(id,name)",
-    {headers:{Authorization:"Bearer "+tok}});
-  if(!r.ok)throw new Error("find "+r.status);
-  const d=await r.json();return d.files&&d.files[0]||null;
-}
-async function dRead(tok,name){
-  const f=await dFind(tok,name);if(!f)return null;
-  const r=await fetch("https://www.googleapis.com/drive/v3/files/"+f.id+"?alt=media",
-    {headers:{Authorization:"Bearer "+tok}});
-  if(!r.ok)return null;
-  try{return JSON.parse(await r.text());}catch{return null;}
-}
-async function dWrite(tok,name,data){
-  const ex=await dFind(tok,name);
-  const fd=new FormData();
-  fd.append("metadata",new Blob([JSON.stringify(ex?{name}:{name,parents:["appDataFolder"]})],{type:"application/json"}));
-  fd.append("file",new Blob([JSON.stringify(data)],{type:"application/json"}));
-  const r=await fetch("https://www.googleapis.com/upload/drive/v3/files"+(ex?"/"+ex.id:"")+"?uploadType=multipart",
-    {method:ex?"PATCH":"POST",headers:{Authorization:"Bearer "+tok},body:fd});
-  if(!r.ok)throw new Error("write "+r.status+" "+(await r.text()));
+// ── Drive API (FIXED VERSION) ──
+async function dFind(tok, name) {
+  // 防止文件名带单引号导致语法错误
+  const safeName = name.replace(/'/g, "\\'");
+
+  const q = encodeURIComponent(
+    `name='${safeName}' and trashed=false`
+  );
+
+  const url =
+    "https://www.googleapis.com/drive/v3/files" +
+    "?q=" + q +
+    "&spaces=appDataFolder" +
+    "&fields=files(id,name)";
+
+  const r = await fetch(url, {
+    headers: { Authorization: "Bearer " + tok }
+  });
+
+  if (!r.ok) {
+    const err = await r.text();
+    throw new Error("find " + r.status + " " + err);
+  }
+
+  const d = await r.json();
+  return (d.files && d.files[0]) || null;
 }
 
-const inp=(x={})=>({background:"#fff",border:"1.5px solid #e0e0ee",borderRadius:8,padding:"9px 12px",color:"#1a1a2e",fontSize:13,outline:"none",width:"100%",...x});
-const pb=(x={})=>({background:"#4f46e5",border:"none",color:"#fff",padding:"8px 18px",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600,...x});
-const gb=(x={})=>({background:"transparent",border:"1.5px solid #e0e0ee",color:"#888",padding:"7px 16px",borderRadius:8,cursor:"pointer",fontSize:13,...x});
+async function dRead(tok, name) {
+  const f = await dFind(tok, name);
+  if (!f) return null;
 
+  const r = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`,
+    { headers: { Authorization: "Bearer " + tok } }
+  );
+
+  if (!r.ok) return null;
+
+  try {
+    return JSON.parse(await r.text());
+  } catch {
+    return null;
+  }
+}
+
+async function dWrite(tok, name, data) {
+  const existing = await dFind(tok, name);
+
+  const metadata = existing
+    ? { name }
+    : { name, parents: ["appDataFolder"] };
+
+  const form = new FormData();
+  form.append(
+    "metadata",
+    new Blob([JSON.stringify(metadata)], {
+      type: "application/json"
+    })
+  );
+  form.append(
+    "file",
+    new Blob([JSON.stringify(data)], {
+      type: "application/json"
+    })
+  );
+
+  const url =
+    "https://www.googleapis.com/upload/drive/v3/files" +
+    (existing ? "/" + existing.id : "") +
+    "?uploadType=multipart";
+
+  const r = await fetch(url, {
+    method: existing ? "PATCH" : "POST",
+    headers: { Authorization: "Bearer " + tok },
+    body: form
+  });
+
+  if (!r.ok) {
+    const err = await r.text();
+    throw new Error("write " + r.status + " " + err);
+  }
+}
 function App(){
   // ── state ──
   const [auth,setAuth]=useState("idle"); // idle|loading|ok|error
