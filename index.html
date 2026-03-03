@@ -7,35 +7,49 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet"/>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{background:#080810;color:#e0e0f0;font-family:'Noto Sans SC','PingFang SC',sans-serif}
-  ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:#0a0a14}::-webkit-scrollbar-thumb{background:#2a2a44;border-radius:4px}
-  @keyframes si{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:translateX(0)}}
-  @keyframes fi{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
-  input::placeholder,textarea::placeholder{color:#444}
-  select option{background:#1a1a30;color:#e0e0ff}
+  body{background:#f5f6fa;color:#1a1a2e;font-family:'Inter','Noto Sans SC','PingFang SC',sans-serif;font-size:14px}
+  ::-webkit-scrollbar{width:5px}
+  ::-webkit-scrollbar-track{background:#f0f0f5}
+  ::-webkit-scrollbar-thumb{background:#d0d0e0;border-radius:4px}
+  @keyframes si{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes fi{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+  input::placeholder,textarea::placeholder{color:#bbbbc8}
+  select option{background:#fff;color:#1a1a2e}
   button:focus{outline:none}
+  .card:hover{box-shadow:0 2px 12px rgba(80,80,180,0.08)!important}
   .card:hover .acts{opacity:1!important}
+  .ltcard:hover{box-shadow:0 2px 12px rgba(80,80,180,0.08)!important}
   .ltcard:hover .ltacts{opacity:1!important}
+  .week-item:hover{background:#f0f0fa!important;color:#4444cc!important}
 </style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState, useEffect, useCallback } = React;
+const { useState, useEffect, useCallback, useRef } = React;
+
+const CLIENT_ID = "575074826162-67sv63cg4gss5k5t9vcsbds0cedb3ftt.apps.googleusercontent.com";
+const SCOPES = "https://www.googleapis.com/auth/drive.appdata";
+const TASKS_FILENAME  = "weekflow-tasks.json";
+const LTASKS_FILENAME = "weekflow-longterm.json";
 
 const STATUS_LABEL = { todo:"待开始", doing:"进行中", done:"已完成", postponed:"已推迟" };
-const STATUS_COLOR = {
-  todo:      { bg:"#14142a", border:"#3a3a70", text:"#8888cc", dot:"#5555aa" },
-  doing:     { bg:"#0f1e18", border:"#2d5c42", text:"#77bb99", dot:"#33996a" },
-  done:      { bg:"#0a1810", border:"#1d5028", text:"#55bb77", dot:"#22994a" },
-  postponed: { bg:"#1e0f0f", border:"#7a3333", text:"#bb7777", dot:"#cc4444" },
+const STATUS_STYLE = {
+  todo:      { bg:"#f5f5ff", border:"#ddddf5", text:"#6666cc", dot:"#9999dd", badge:"#eeeefc" },
+  doing:     { bg:"#f0faf5", border:"#c8eedd", text:"#2a8a5a", dot:"#44aa77", badge:"#e0f5ea" },
+  done:      { bg:"#f0fdf5", border:"#b8e8cc", text:"#1a7a44", dot:"#33aa66", badge:"#d8f5e4" },
+  postponed: { bg:"#fff5f5", border:"#f5cccc", text:"#cc3333", dot:"#ee6666", badge:"#feeaea" },
 };
-const PRIORITY = { high:"🔴 高", mid:"🟡 中", low:"🔵 低" };
-const STORAGE_KEY  = "weekflow-v2-tasks";
-const LONGTERM_KEY = "weekflow-v2-longterm";
+const PRIORITY_STYLE = {
+  high: { label:"高优先级", color:"#e53935", bg:"#fff0f0", border:"#ffcccc" },
+  mid:  { label:"中优先级", color:"#f57c00", bg:"#fff8f0", border:"#ffe0b0" },
+  low:  { label:"低优先级", color:"#1976d2", bg:"#f0f5ff", border:"#c5d8ff" },
+};
 const uid = () => Math.random().toString(36).slice(2,10);
 
 function getMonday(offset=0){
@@ -60,14 +74,68 @@ function wLabel(key){
   const sunday=new Date(monday);sunday.setDate(monday.getDate()+6);
   const fmt=d=>`${d.getMonth()+1}/${d.getDate()}`;
   const curKey=wKey(0),prevKey=wKey(-1);
-  if(key===curKey) return `📅 本周 (${fmt(monday)}–${fmt(sunday)})`;
-  if(key===prevKey) return `⏮ 上周 (${fmt(monday)}–${fmt(sunday)})`;
+  if(key===curKey) return `本周 (${fmt(monday)}–${fmt(sunday)})`;
+  if(key===prevKey) return `上周 (${fmt(monday)}–${fmt(sunday)})`;
   return `${year} 第${wn}周 (${fmt(monday)}–${fmt(sunday)})`;
 }
-const inpStyle=(extra={})=>({background:"#0a0a1a",border:"1px solid #2a2a44",borderRadius:8,padding:"9px 13px",color:"#e0e0ff",fontSize:13,outline:"none",width:"100%",...extra});
-const btnStyle=(primary=false)=>({padding:primary?"8px 20px":"7px 16px",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:primary?700:400,border:primary?"none":"1px solid #333",background:primary?"linear-gradient(135deg,#5555ff,#7755ff)":"transparent",color:primary?"#fff":"#888"});
 
-function App(){
+// Input/Button style helpers
+const inp = (extra={}) => ({
+  background:"#fff", border:"1.5px solid #e0e0ee", borderRadius:8,
+  padding:"9px 12px", color:"#1a1a2e", fontSize:13, outline:"none",
+  width:"100%", transition:"border-color 0.15s", ...extra
+});
+const primaryBtn = (extra={}) => ({
+  background:"#4f46e5", border:"none", color:"#fff",
+  padding:"8px 18px", borderRadius:8, cursor:"pointer",
+  fontSize:13, fontWeight:600, transition:"background 0.15s", ...extra
+});
+const ghostBtn = (extra={}) => ({
+  background:"transparent", border:"1.5px solid #e0e0ee", color:"#888",
+  padding:"7px 16px", borderRadius:8, cursor:"pointer", fontSize:13, ...extra
+});
+
+// Google Drive helpers
+let gAccessToken = null;
+
+async function gDriveRequest(method,url,body=null){
+  const headers={Authorization:`Bearer ${gAccessToken}`};
+  if(body) headers["Content-Type"]="application/json";
+  const res=await fetch(url,{method,headers,body:body?JSON.stringify(body):undefined});
+  if(!res.ok) throw new Error(`Drive error ${res.status}`);
+  const text=await res.text();
+  return text?JSON.parse(text):null;
+}
+async function findFile(name){
+  const q=encodeURIComponent(`name='${name}' and spaces='appDataFolder' and trashed=false`);
+  const d=await gDriveRequest("GET",`https://www.googleapis.com/drive/v3/files?q=${q}&spaces=appDataFolder&fields=files(id,name)`);
+  return d?.files?.[0]||null;
+}
+async function readFile(name){
+  const file=await findFile(name);
+  if(!file) return null;
+  const res=await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`,{headers:{Authorization:`Bearer ${gAccessToken}`}});
+  if(!res.ok) return null;
+  try{return JSON.parse(await res.text());}catch{return null;}
+}
+async function writeFile(name,data){
+  const existing=await findFile(name);
+  const blob=new Blob([JSON.stringify(data)],{type:"application/json"});
+  const fd=new FormData();
+  fd.append("metadata",new Blob([JSON.stringify(existing?{name}:{name,parents:["appDataFolder"]})],{type:"application/json"}));
+  fd.append("file",blob);
+  await fetch(`https://www.googleapis.com/upload/drive/v3/files${existing?"/"+existing.id:""}?uploadType=multipart`,{
+    method:existing?"PATCH":"POST",
+    headers:{Authorization:`Bearer ${gAccessToken}`},
+    body:fd
+  });
+}
+
+export default function App(){
+  const [authState,setAuthState]=useState("idle");
+  const [userInfo,setUserInfo]=useState(null);
+  const [syncState,setSyncState]=useState("idle");
+  const syncTimer=useRef(null);
   const [weekData,setWeekData]=useState({});
   const [longTerms,setLongTerms]=useState([]);
   const [activeWeek,setActiveWeek]=useState(wKey(0));
@@ -85,15 +153,46 @@ function App(){
   const [ltTimelineId,setLtTimelineId]=useState(null);
   const [postponeModal,setPostponeModal]=useState(false);
 
-  useEffect(()=>{
-    try{
-      const a=localStorage.getItem(STORAGE_KEY),b=localStorage.getItem(LONGTERM_KEY);
-      if(a)setWeekData(JSON.parse(a));if(b)setLongTerms(JSON.parse(b));
-    }catch{}
+  const notify=(msg,type="ok")=>{setNotif({msg,type});setTimeout(()=>setNotif(null),2800);};
+
+  const signInWithDrive=useCallback(()=>{
+    setAuthState("loading");
+    const client=google.accounts.oauth2.initTokenClient({
+      client_id:CLIENT_ID, scope:SCOPES,
+      callback:async(tr)=>{
+        if(tr.error){setAuthState("error");notify("登录失败，请重试","warn");return;}
+        gAccessToken=tr.access_token;
+        try{
+          // get user info
+          const ui=await fetch("https://www.googleapis.com/oauth2/v3/userinfo",{headers:{Authorization:`Bearer ${gAccessToken}`}});
+          if(ui.ok){const d=await ui.json();setUserInfo(d);}
+          const [wd,lt]=await Promise.all([readFile(TASKS_FILENAME),readFile(LTASKS_FILENAME)]);
+          if(wd)setWeekData(wd);
+          if(lt)setLongTerms(lt);
+          setAuthState("signed_in");
+          notify("已连接 Google Drive ✓");
+        }catch{setAuthState("error");notify("读取数据失败","warn");}
+      }
+    });
+    client.requestAccessToken();
   },[]);
 
-  const saveWeek=useCallback(d=>{setWeekData(d);try{localStorage.setItem(STORAGE_KEY,JSON.stringify(d));}catch{}},[]);
-  const saveLT=useCallback(lt=>{setLongTerms(lt);try{localStorage.setItem(LONGTERM_KEY,JSON.stringify(lt));}catch{}},[]);
+  const signOut=()=>{gAccessToken=null;setAuthState("idle");setUserInfo(null);setWeekData({});setLongTerms([]);};
+
+  const scheduleSave=useCallback((wd,lt)=>{
+    if(!gAccessToken)return;
+    if(syncTimer.current)clearTimeout(syncTimer.current);
+    setSyncState("syncing");
+    syncTimer.current=setTimeout(async()=>{
+      try{
+        await Promise.all([writeFile(TASKS_FILENAME,wd),writeFile(LTASKS_FILENAME,lt)]);
+        setSyncState("saved");setTimeout(()=>setSyncState("idle"),2000);
+      }catch{setSyncState("error");notify("同步失败","warn");}
+    },1200);
+  },[]);
+
+  const saveWeek=useCallback(d=>{setWeekData(d);scheduleSave(d,longTerms);},[longTerms,scheduleSave]);
+  const saveLT=useCallback(lt=>{setLongTerms(lt);scheduleSave(weekData,lt);},[weekData,scheduleSave]);
 
   const curKey=wKey(0),prevKey=wKey(-1);
   const tasks=weekData[activeWeek]||[];
@@ -104,50 +203,46 @@ function App(){
   const allWeeks=[...new Set([curKey,prevKey,...Object.keys(weekData)])].sort((a,b)=>b.localeCompare(a)).slice(0,20);
   const stats={total:tasks.length,done:tasks.filter(t=>t.status==="done").length,doing:tasks.filter(t=>t.status==="doing").length,postponed:tasks.filter(t=>t.status==="postponed").length};
 
-  const notify=(msg,type="ok")=>{setNotif({msg,type});setTimeout(()=>setNotif(null),2500);};
-
   const carryOver=()=>{
     const carried=postponedPrev.map(t=>({...t,id:uid(),status:"todo",carriedFrom:prevKey,createdAt:Date.now()}));
     const updPrev=prevT.map(t=>t.status==="postponed"?{...t,carriedOver:true}:t);
     saveWeek({...weekData,[prevKey]:updPrev,[curKey]:[...(weekData[curKey]||[]),...carried]});
-    setPostponeModal(false);notify(`已将 ${carried.length} 个推迟任务结转到本周 ✨`);
+    setPostponeModal(false);notify(`已将 ${carried.length} 个任务结转到本周 ✨`);
   };
-
   const addWeekTask=()=>{
     if(!weekForm.title.trim())return;
     const t={id:uid(),...weekForm,title:weekForm.title.trim(),desc:weekForm.desc.trim(),tag:weekForm.tag.trim(),createdAt:Date.now()};
     saveWeek({...weekData,[activeWeek]:[...tasks,t]});
     if(weekForm.linkedLT)addLTLog(weekForm.linkedLT,`[关联周任务] ${weekForm.title.trim()}`);
     setWeekForm({title:"",desc:"",priority:"mid",status:"todo",tag:"",linkedLT:null});
-    setShowWeekAdd(false);notify("任务已添加 🎯");
+    setShowWeekAdd(false);notify("任务已添加");
   };
   const updateWeekTask=()=>{
     if(!weekForm.title.trim())return;
     saveWeek({...weekData,[activeWeek]:tasks.map(t=>t.id===editWeekTask.id?{...t,...weekForm}:t)});
-    setEditWeekTask(null);notify("已更新 ✏️");
+    setEditWeekTask(null);notify("已更新");
   };
   const deleteWeekTask=id=>{saveWeek({...weekData,[activeWeek]:tasks.filter(t=>t.id!==id)});notify("已删除","warn");};
   const changeStatus=(id,status)=>{
     saveWeek({...weekData,[activeWeek]:tasks.map(t=>t.id===id?{...t,status}:t)});
     if(status==="postponed")notify("已推迟，下周自动提醒 ⏰");
-    if(status==="done")notify("完成！🎉");
+    if(status==="done")notify("完成 🎉");
   };
   const openEditWeek=t=>{setEditWeekTask(t);setWeekForm({title:t.title,desc:t.desc||"",priority:t.priority,status:t.status,tag:t.tag||"",linkedLT:t.linkedLT||null});setShowWeekAdd(false);};
 
   const addLT=()=>{
     if(!ltForm.title.trim())return;
-    const lt={id:uid(),...ltForm,title:ltForm.title.trim(),desc:ltForm.desc.trim(),tag:ltForm.tag.trim(),createdAt:Date.now(),status:"doing",logs:[]};
-    saveLT([...longTerms,lt]);setLtForm({title:"",desc:"",priority:"mid",tag:""});setShowLTAdd(false);notify("长期任务已创建 🏗️");
+    saveLT([...longTerms,{id:uid(),...ltForm,title:ltForm.title.trim(),desc:ltForm.desc.trim(),tag:ltForm.tag.trim(),createdAt:Date.now(),status:"doing",logs:[]}]);
+    setLtForm({title:"",desc:"",priority:"mid",tag:""});setShowLTAdd(false);notify("长期任务已创建");
   };
-  const updateLT=()=>{if(!ltForm.title.trim())return;saveLT(longTerms.map(lt=>lt.id===editLT.id?{...lt,...ltForm}:lt));setEditLT(null);notify("已更新 ✏️");};
+  const updateLT=()=>{if(!ltForm.title.trim())return;saveLT(longTerms.map(lt=>lt.id===editLT.id?{...lt,...ltForm}:lt));setEditLT(null);notify("已更新");};
   const deleteLT=id=>{saveLT(longTerms.filter(lt=>lt.id!==id));notify("已删除","warn");};
   const toggleLTStatus=id=>saveLT(longTerms.map(lt=>lt.id===id?{...lt,status:lt.status==="done"?"doing":"done"}:lt));
-
   const addLTLog=(ltId,text)=>{
     const trimmed=(text||ltLogText).trim();if(!trimmed)return;
     const entry={id:uid(),text:trimmed,week:activeWeek,weekLabel:wLabel(activeWeek),createdAt:Date.now()};
-    saveLT(longTerms.map(lt=>lt.id===ltId?{...lt,logs:[...lt.logs,entry]}:lt));
-    setLtLogText("");setLtLogModal(null);notify("进展已记录 📝");
+    saveLT(longTerms.map(lt=>lt.id===ltId?{...lt,logs:[...(lt.logs||[]),entry]}:lt));
+    setLtLogText("");setLtLogModal(null);notify("进展已记录");
   };
   const deleteLTLog=(ltId,logId)=>saveLT(longTerms.map(lt=>lt.id===ltId?{...lt,logs:lt.logs.filter(l=>l.id!==logId)}:lt));
 
@@ -156,258 +251,338 @@ function App(){
   const ltTimeline=ltTimelineId?longTerms.find(lt=>lt.id===ltTimelineId):null;
   const ltLogTarget=ltLogModal?longTerms.find(lt=>lt.id===ltLogModal):null;
 
+  // ── Login Screen ─────────────────────────────────────────────
+  if(authState!=="signed_in"){
+    return (
+      <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#f5f6fa"}}>
+        <div style={{textAlign:"center",maxWidth:400,width:"90%"}}>
+          {/* Logo */}
+          <div style={{marginBottom:32}}>
+            <div style={{width:56,height:56,borderRadius:16,background:"#4f46e5",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",boxShadow:"0 4px 20px rgba(79,70,229,0.3)"}}>
+              <span style={{fontSize:28}}>✦</span>
+            </div>
+            <div style={{fontSize:22,fontWeight:700,color:"#1a1a2e",letterSpacing:-0.5}}>Weekflow</div>
+            <div style={{fontSize:13,color:"#aaa",marginTop:4}}>周任务管理 · 跨设备同步</div>
+          </div>
+
+          <div style={{background:"#fff",borderRadius:16,padding:"32px",boxShadow:"0 4px 24px rgba(0,0,0,0.06)",border:"1px solid #ebebf5"}}>
+            <div style={{fontSize:13,color:"#666",lineHeight:1.8,marginBottom:28}}>
+              登录后数据自动保存到你的 Google Drive<br/>
+              任何设备打开都能同步，永不丢失
+            </div>
+            {authState==="loading"
+              ?<div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,color:"#4f46e5",fontSize:13,padding:"12px 0"}}>
+                <div style={{width:16,height:16,border:"2px solid #4f46e5",borderTopColor:"transparent",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>连接中...
+              </div>
+              :<button onClick={signInWithDrive} style={{...primaryBtn(),width:"100%",padding:"12px 0",fontSize:14,borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",gap:10,boxShadow:"0 4px 16px rgba(79,70,229,0.25)"}}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                使用 Google 账号登录
+              </button>
+            }
+            {authState==="error"&&<div style={{marginTop:12,fontSize:12,color:"#e53935"}}>登录出现问题，请重试</div>}
+          </div>
+          <div style={{fontSize:11,color:"#ccc",marginTop:20,lineHeight:1.8}}>数据仅存储在你自己的 Google Drive · 我们无法访问</div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Main App ──────────────────────────────────────────────────
   return (
-    <div style={{minHeight:"100vh",display:"flex",flexDirection:"column"}}>
-      {notif&&<div style={{position:"fixed",top:18,right:18,zIndex:9999,background:notif.type==="warn"?"#2a1010":"#0f2219",border:`1px solid ${notif.type==="warn"?"#bb3333":"#33994a"}`,color:notif.type==="warn"?"#ff8888":"#77ffaa",padding:"10px 20px",borderRadius:8,fontFamily:"'Space Mono',monospace",fontSize:12,boxShadow:"0 4px 24px rgba(0,0,0,0.6)",animation:"si 0.2s ease"}}>{notif.msg}</div>}
+    <div style={{minHeight:"100vh",background:"#f5f6fa",display:"flex",flexDirection:"column"}}>
+      {/* Notification */}
+      {notif&&<div style={{position:"fixed",top:16,right:16,zIndex:9999,background:notif.type==="warn"?"#fff5f5":"#f0fdf5",border:`1px solid ${notif.type==="warn"?"#ffcccc":"#bbeecc"}`,color:notif.type==="warn"?"#cc3333":"#1a7a44",padding:"10px 18px",borderRadius:10,fontSize:13,fontWeight:500,boxShadow:"0 4px 20px rgba(0,0,0,0.08)",animation:"si 0.2s ease"}}>{notif.msg}</div>}
 
       {/* Header */}
-      <div style={{background:"linear-gradient(135deg,#0c0c1c,#12122a)",borderBottom:"1px solid #1c1c38",padding:"18px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-        <div style={{display:"flex",alignItems:"baseline",gap:14}}>
-          <span style={{fontSize:18,fontFamily:"'Space Mono',monospace",color:"#7777ff",letterSpacing:3,fontWeight:700}}>WEEKFLOW</span>
-          <div style={{display:"flex",borderRadius:7,overflow:"hidden",border:"1px solid #2a2a44"}}>
+      <div style={{background:"#fff",borderBottom:"1px solid #ebebf5",padding:"0 24px",height:56,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:20}}>
+          {/* Logo */}
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <div style={{width:28,height:28,borderRadius:8,background:"#4f46e5",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <span style={{fontSize:14,color:"#fff"}}>✦</span>
+            </div>
+            <span style={{fontSize:15,fontWeight:700,color:"#1a1a2e",letterSpacing:-0.3}}>Weekflow</span>
+          </div>
+          {/* Nav */}
+          <div style={{display:"flex",gap:2}}>
             {[["week","周任务"],["longterm","长期追踪"]].map(([v,l])=>(
-              <button key={v} onClick={()=>setView(v)} style={{padding:"5px 14px",cursor:"pointer",background:view===v?"#2a2a55":"transparent",border:"none",color:view===v?"#aaaaff":"#555",fontSize:12,fontWeight:view===v?600:400}}>{l}</button>
+              <button key={v} onClick={()=>setView(v)} style={{padding:"5px 14px",borderRadius:7,cursor:"pointer",background:view===v?"#f0f0fa":"transparent",border:"none",color:view===v?"#4f46e5":"#888",fontSize:13,fontWeight:view===v?600:400,transition:"all 0.15s"}}>{l}</button>
             ))}
           </div>
         </div>
-        {view==="week"&&<div style={{display:"flex",gap:18}}>
-          {[["总计",stats.total,"#6666cc"],["进行",stats.doing,"#33996a"],["完成",stats.done,"#22994a"],["推迟",stats.postponed,"#cc4444"]].map(([l,v,c])=>(
-            <div key={l} style={{textAlign:"center"}}>
-              <div style={{fontSize:20,fontWeight:700,color:c,fontFamily:"'Space Mono',monospace",lineHeight:1}}>{v}</div>
-              <div style={{fontSize:10,color:"#444",marginTop:2}}>{l}</div>
-            </div>
-          ))}
-        </div>}
-        {view==="longterm"&&<div style={{fontSize:12,color:"#555"}}>{longTerms.filter(lt=>lt.status==="doing").length} 个进行中 · {longTerms.filter(lt=>lt.status==="done").length} 个已完成</div>}
+
+        <div style={{display:"flex",alignItems:"center",gap:14}}>
+          {/* Sync status */}
+          <div style={{fontSize:12,display:"flex",alignItems:"center",gap:5,color:syncState==="error"?"#e53935":syncState==="saved"?"#1a7a44":syncState==="syncing"?"#4f46e5":"#ccc"}}>
+            {syncState==="syncing"&&<div style={{width:8,height:8,border:"1.5px solid #4f46e5",borderTopColor:"transparent",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>}
+            {syncState==="saved"&&"✓ 已同步"}
+            {syncState==="syncing"&&"同步中"}
+            {syncState==="error"&&"✗ 同步失败"}
+          </div>
+          {/* Stats pills — week view only */}
+          {view==="week"&&<div style={{display:"flex",gap:6}}>
+            {[["进行中",stats.doing,"#f0faf5","#2a8a5a"],["已完成",stats.done,"#f0fdf5","#1a7a44"],["已推迟",stats.postponed,"#fff5f5","#cc3333"]].map(([l,v,bg,c])=>(
+              <div key={l} style={{background:bg,border:`1px solid ${c}22`,borderRadius:20,padding:"3px 10px",fontSize:12,color:c,fontWeight:500}}>{v} {l}</div>
+            ))}
+          </div>}
+          {/* User */}
+          <div style={{display:"flex",alignItems:"center",gap:8,background:"#f5f5fa",border:"1px solid #ebebf5",borderRadius:20,padding:"4px 12px 4px 5px",cursor:"pointer"}} onClick={signOut} title="点击退出登录">
+            {userInfo?.picture
+              ?<img src={userInfo.picture} style={{width:22,height:22,borderRadius:"50%"}} referrerPolicy="no-referrer"/>
+              :<div style={{width:22,height:22,borderRadius:"50%",background:"#4f46e5",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#fff",fontWeight:700}}>{userInfo?.name?.[0]||"U"}</div>
+            }
+            <span style={{fontSize:12,color:"#888",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{userInfo?.name||userInfo?.email||"已登录"}</span>
+          </div>
+        </div>
       </div>
 
-      <div style={{display:"flex",flex:1,overflow:"hidden",minHeight:"calc(100vh - 72px)"}}>
+      <div style={{display:"flex",flex:1,overflow:"hidden",minHeight:"calc(100vh - 56px)"}}>
         {/* Sidebar */}
-        {view==="week"&&<div style={{width:196,background:"#0a0a16",borderRight:"1px solid #18183a",padding:"18px 0",flexShrink:0,overflowY:"auto"}}>
-          <div style={{padding:"0 14px",marginBottom:8,fontSize:9,color:"#333",letterSpacing:3,fontFamily:"'Space Mono',monospace"}}>WEEKS</div>
+        {view==="week"&&<div style={{width:210,background:"#fff",borderRight:"1px solid #ebebf5",padding:"16px 0",flexShrink:0,overflowY:"auto"}}>
+          <div style={{padding:"0 16px 8px",fontSize:10,color:"#bbb",letterSpacing:2,fontWeight:600,textTransform:"uppercase"}}>历史周</div>
           {allWeeks.map(w=>(
-            <div key={w} onClick={()=>{setActiveWeek(w);setFilter("all");setShowWeekAdd(false);setEditWeekTask(null);}} style={{padding:"9px 14px",cursor:"pointer",background:activeWeek===w?"#18183a":"transparent",borderLeft:activeWeek===w?"2px solid #6666ff":"2px solid transparent",fontSize:11,color:activeWeek===w?"#9999ff":"#444",fontFamily:"'Space Mono',monospace",transition:"all 0.15s",lineHeight:1.4}}>
-              {w===curKey?"📅 本周":w===prevKey?"⏮ 上周":w}
-              {weekData[w]?.length>0&&<span style={{float:"right",color:activeWeek===w?"#5555aa":"#2a2a44",fontSize:10}}>{weekData[w].length}</span>}
+            <div key={w} className="week-item" onClick={()=>{setActiveWeek(w);setFilter("all");setShowWeekAdd(false);setEditWeekTask(null);}} style={{padding:"9px 16px",cursor:"pointer",background:activeWeek===w?"#f0f0fa":"transparent",borderLeft:activeWeek===w?"2px solid #4f46e5":"2px solid transparent",fontSize:12,color:activeWeek===w?"#4f46e5":"#888",fontWeight:activeWeek===w?600:400,transition:"all 0.12s",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span>{w===curKey?"📅 本周":w===prevKey?"⏮ 上周":w}</span>
+              {weekData[w]?.length>0&&<span style={{background:activeWeek===w?"#e8e8fc":"#f0f0f5",color:activeWeek===w?"#4f46e5":"#aaa",borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:600}}>{weekData[w].length}</span>}
             </div>
           ))}
         </div>}
 
-        {/* Main */}
+        {/* Main content */}
         <div style={{flex:1,padding:"20px 24px",overflowY:"auto"}}>
 
-          {/* WEEK VIEW */}
+          {/* ── WEEK VIEW ── */}
           {view==="week"&&<>
-            {hasAlert&&<div style={{background:"#1a0a0a",border:"1px solid #993333",borderRadius:10,padding:"12px 16px",marginBottom:18,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8,animation:"fi 0.3s ease"}}>
+            {/* Postpone alert */}
+            {hasAlert&&<div style={{background:"#fff8f0",border:"1px solid #ffd8a0",borderRadius:12,padding:"14px 18px",marginBottom:20,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10,animation:"fi 0.3s ease"}}>
               <div>
-                <div style={{color:"#ff6666",fontWeight:600,fontSize:13}}>⚠️ 上周有 {postponedPrev.length} 个推迟任务</div>
-                <div style={{color:"#774444",fontSize:11,marginTop:3}}>{postponedPrev.map(t=>t.title).join(" · ")}</div>
+                <div style={{color:"#e07800",fontWeight:600,fontSize:13}}>⚠️ 上周有 {postponedPrev.length} 个推迟任务</div>
+                <div style={{color:"#b08040",fontSize:12,marginTop:3}}>{postponedPrev.map(t=>t.title).join(" · ")}</div>
               </div>
               <div style={{display:"flex",gap:8}}>
-                <button onClick={()=>setPostponeModal(true)} style={{background:"#2a1010",border:"1px solid #993333",color:"#ff7777",padding:"5px 12px",borderRadius:6,cursor:"pointer",fontSize:11}}>查看</button>
-                <button onClick={carryOver} style={{background:"#993333",border:"none",color:"#fff",padding:"5px 12px",borderRadius:6,cursor:"pointer",fontSize:11,fontWeight:700}}>一键结转本周 →</button>
+                <button onClick={()=>setPostponeModal(true)} style={{background:"#fff",border:"1px solid #ffd8a0",color:"#e07800",padding:"5px 14px",borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:500}}>查看详情</button>
+                <button onClick={carryOver} style={{background:"#f57c00",border:"none",color:"#fff",padding:"5px 14px",borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:600}}>一键结转本周 →</button>
               </div>
             </div>}
 
+            {/* Toolbar */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,flexWrap:"wrap",gap:8}}>
-              <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+              <div style={{display:"flex",gap:4,background:"#fff",border:"1px solid #ebebf5",borderRadius:9,padding:3}}>
                 {["all","todo","doing","done","postponed"].map(f=>(
-                  <button key={f} onClick={()=>setFilter(f)} style={{padding:"4px 11px",borderRadius:6,cursor:"pointer",fontSize:11,border:filter===f?"1px solid #6666ff":"1px solid #22223a",background:filter===f?"#18183a":"transparent",color:filter===f?"#9999ff":"#555"}}>
-                    {f==="all"?"全部":STATUS_LABEL[f]}<span style={{marginLeft:4,opacity:0.6}}>{f==="all"?tasks.length:tasks.filter(t=>t.status===f).length}</span>
+                  <button key={f} onClick={()=>setFilter(f)} style={{padding:"4px 12px",borderRadius:7,cursor:"pointer",fontSize:12,border:"none",background:filter===f?"#4f46e5":"transparent",color:filter===f?"#fff":"#888",fontWeight:filter===f?600:400,transition:"all 0.12s"}}>
+                    {f==="all"?"全部":STATUS_LABEL[f]}
+                    <span style={{marginLeft:4,opacity:0.7,fontSize:11}}>{f==="all"?tasks.length:tasks.filter(t=>t.status===f).length}</span>
                   </button>
                 ))}
               </div>
-              {isEditable&&<button onClick={()=>{setShowWeekAdd(v=>!v);setEditWeekTask(null);}} style={{...btnStyle(true),fontSize:12,padding:"6px 16px",boxShadow:"0 2px 12px rgba(80,80,255,0.3)"}}>{showWeekAdd?"✕ 取消":"+ 新建任务"}</button>}
+              {isEditable&&<button onClick={()=>{setShowWeekAdd(v=>!v);setEditWeekTask(null);}} style={primaryBtn({padding:"7px 16px",borderRadius:8})}>
+                {showWeekAdd?"✕ 取消":"＋ 新建任务"}
+              </button>}
             </div>
 
-            {(showWeekAdd||editWeekTask)&&<div style={{background:"#0d0d22",border:"1px solid #272750",borderRadius:12,padding:18,marginBottom:18,animation:"fi 0.2s ease"}}>
-              <div style={{fontWeight:600,color:"#9999ff",marginBottom:12,fontSize:13}}>{editWeekTask?"✏️ 编辑任务":"🎯 新建任务"}</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:10}}>
-                <input value={weekForm.title} onChange={e=>setWeekForm(f=>({...f,title:e.target.value}))} placeholder="任务标题 *" style={{...inpStyle(),gridColumn:"1/-1"}}/>
-                <textarea value={weekForm.desc} onChange={e=>setWeekForm(f=>({...f,desc:e.target.value}))} placeholder="描述（可选）" rows={2} style={{...inpStyle(),gridColumn:"1/-1",resize:"none"}}/>
-                <select value={weekForm.priority} onChange={e=>setWeekForm(f=>({...f,priority:e.target.value}))} style={inpStyle()}>
-                  {Object.entries(PRIORITY).map(([k,v])=><option key={k} value={k}>{v} 优先级</option>)}
+            {/* Add/Edit form */}
+            {(showWeekAdd||editWeekTask)&&<div style={{background:"#fff",border:"1px solid #ebebf5",borderRadius:12,padding:20,marginBottom:16,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",animation:"fi 0.2s ease"}}>
+              <div style={{fontWeight:600,color:"#1a1a2e",marginBottom:14,fontSize:14}}>{editWeekTask?"编辑任务":"新建任务"}</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+                <input value={weekForm.title} onChange={e=>setWeekForm(f=>({...f,title:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&addWeekTask()} placeholder="任务标题 *" style={{...inp(),gridColumn:"1/-1"}}/>
+                <textarea value={weekForm.desc} onChange={e=>setWeekForm(f=>({...f,desc:e.target.value}))} placeholder="描述（可选）" rows={2} style={{...inp(),gridColumn:"1/-1",resize:"none"}}/>
+                <select value={weekForm.priority} onChange={e=>setWeekForm(f=>({...f,priority:e.target.value}))} style={inp()}>
+                  {Object.entries(PRIORITY_STYLE).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
                 </select>
-                <select value={weekForm.status} onChange={e=>setWeekForm(f=>({...f,status:e.target.value}))} style={inpStyle()}>
+                <select value={weekForm.status} onChange={e=>setWeekForm(f=>({...f,status:e.target.value}))} style={inp()}>
                   {Object.entries(STATUS_LABEL).map(([k,v])=><option key={k} value={k}>{v}</option>)}
                 </select>
-                <input value={weekForm.tag} onChange={e=>setWeekForm(f=>({...f,tag:e.target.value}))} placeholder="标签" style={inpStyle()}/>
-                {longTerms.length>0&&<select value={weekForm.linkedLT||""} onChange={e=>setWeekForm(f=>({...f,linkedLT:e.target.value||null}))} style={inpStyle()}>
-                  <option value="">— 关联长期任务（可选）</option>
+                <input value={weekForm.tag} onChange={e=>setWeekForm(f=>({...f,tag:e.target.value}))} placeholder="标签（如：产品 / 研发）" style={inp()}/>
+                {longTerms.length>0&&<select value={weekForm.linkedLT||""} onChange={e=>setWeekForm(f=>({...f,linkedLT:e.target.value||null}))} style={inp()}>
+                  <option value="">关联长期任务（可选）</option>
                   {longTerms.filter(lt=>lt.status==="doing").map(lt=><option key={lt.id} value={lt.id}>🔗 {lt.title}</option>)}
                 </select>}
               </div>
               <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-                <button onClick={()=>{setShowWeekAdd(false);setEditWeekTask(null);}} style={btnStyle()}>取消</button>
-                <button onClick={editWeekTask?updateWeekTask:addWeekTask} style={btnStyle(true)}>{editWeekTask?"保存更改":"添加任务"}</button>
+                <button onClick={()=>{setShowWeekAdd(false);setEditWeekTask(null);}} style={ghostBtn()}>取消</button>
+                <button onClick={editWeekTask?updateWeekTask:addWeekTask} style={primaryBtn()}>{editWeekTask?"保存更改":"添加任务"}</button>
               </div>
             </div>}
 
-            {filtered.length===0?<div style={{textAlign:"center",color:"#2a2a44",padding:"50px 0",fontFamily:"'Space Mono',monospace",fontSize:12}}>{filter==="all"?(isEditable?"暂无任务，点击「新建任务」开始 🚀":"本周暂无任务"):`没有「${STATUS_LABEL[filter]}」的任务`}</div>:
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              {filtered.map(task=>{
-                const sc=STATUS_COLOR[task.status];
-                const linkedLT=task.linkedLT?longTerms.find(lt=>lt.id===task.linkedLT):null;
-                return <div key={task.id} className="card" style={{background:sc.bg,border:`1px solid ${sc.border}`,borderRadius:10,padding:"13px 15px",display:"flex",alignItems:"flex-start",gap:11,position:"relative"}}>
-                  <div style={{width:9,height:9,borderRadius:"50%",background:sc.dot,marginTop:5,flexShrink:0,boxShadow:`0 0 7px ${sc.dot}99`}}/>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
-                      <span style={{fontSize:14,fontWeight:600,color:"#cccce0",textDecoration:task.status==="done"?"line-through":"none",opacity:task.status==="done"?0.4:1}}>{task.title}</span>
-                      {task.tag&&<span style={{fontSize:10,background:"#18183a",border:"1px solid #2a2a50",color:"#6666aa",padding:"1px 8px",borderRadius:20}}>{task.tag}</span>}
-                      {task.carriedFrom&&<span style={{fontSize:10,background:"#1e0808",border:"1px solid #552222",color:"#bb6666",padding:"1px 8px",borderRadius:20}}>↩ 结转</span>}
-                      <span style={{fontSize:10,color:"#383850"}}>{PRIORITY[task.priority]}</span>
-                      {linkedLT&&<span style={{fontSize:10,background:"#0a1420",border:"1px solid #1a3a5a",color:"#4488aa",padding:"1px 8px",borderRadius:20}}>🔗 {linkedLT.title}</span>}
+            {/* Task list */}
+            {filtered.length===0
+              ?<div style={{textAlign:"center",color:"#ccc",padding:"60px 0",fontSize:13}}>{filter==="all"?(isEditable?"还没有任务，点击「新建任务」开始":"本周暂无任务"):`没有「${STATUS_LABEL[filter]}」的任务`}</div>
+              :<div style={{display:"flex",flexDirection:"column",gap:6}}>
+                {filtered.map(task=>{
+                  const ss=STATUS_STYLE[task.status];
+                  const ps=PRIORITY_STYLE[task.priority];
+                  const linkedLT=task.linkedLT?longTerms.find(lt=>lt.id===task.linkedLT):null;
+                  return <div key={task.id} className="card" style={{background:"#fff",border:`1px solid ${ss.border}`,borderLeft:`3px solid ${ss.dot}`,borderRadius:10,padding:"13px 16px",display:"flex",alignItems:"flex-start",gap:12,position:"relative",transition:"box-shadow 0.15s"}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap",marginBottom:task.desc?6:0}}>
+                        <span style={{fontSize:14,fontWeight:600,color:"#1a1a2e",textDecoration:task.status==="done"?"line-through":"none",opacity:task.status==="done"?0.4:1}}>{task.title}</span>
+                        {/* Status badge */}
+                        <span style={{fontSize:11,background:ss.badge,color:ss.text,border:`1px solid ${ss.border}`,padding:"1px 8px",borderRadius:20,fontWeight:500}}>{STATUS_LABEL[task.status]}</span>
+                        {/* Priority badge */}
+                        <span style={{fontSize:11,background:ps.bg,color:ps.color,border:`1px solid ${ps.border}`,padding:"1px 8px",borderRadius:20,fontWeight:500}}>{ps.label}</span>
+                        {task.tag&&<span style={{fontSize:11,background:"#f5f5fa",color:"#888",border:"1px solid #ebebf5",padding:"1px 8px",borderRadius:20}}>{task.tag}</span>}
+                        {task.carriedFrom&&<span style={{fontSize:11,background:"#fff8f0",color:"#e07800",border:"1px solid #ffd8a0",padding:"1px 8px",borderRadius:20}}>↩ 上周结转</span>}
+                        {linkedLT&&<span style={{fontSize:11,background:"#f0f5ff",color:"#4f46e5",border:"1px solid #dde5ff",padding:"1px 8px",borderRadius:20}}>🔗 {linkedLT.title}</span>}
+                      </div>
+                      {task.desc&&<div style={{fontSize:12,color:"#999",lineHeight:1.6,marginBottom:8}}>{task.desc}</div>}
+                      {/* Status change buttons */}
+                      {isEditable&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:8}}>
+                        {Object.entries(STATUS_LABEL).map(([s,label])=>{
+                          const active=task.status===s;
+                          const ss2=STATUS_STYLE[s];
+                          return <button key={s} onClick={()=>changeStatus(task.id,s)} style={{padding:"2px 10px",borderRadius:5,cursor:"pointer",fontSize:11,border:`1px solid ${active?ss2.dot:ss2.border}`,background:active?ss2.badge:"transparent",color:active?ss2.text:"#aaa",fontWeight:active?600:400,transition:"all 0.1s"}}>{label}</button>;
+                        })}
+                        {linkedLT&&<button onClick={()=>{setLtLogModal(task.linkedLT);setLtLogText(`[来自周任务] ${task.title} 已更新`);}} style={{padding:"2px 10px",borderRadius:5,cursor:"pointer",fontSize:11,border:"1px solid #dde5ff",background:"#f0f5ff",color:"#4f46e5"}}>📝 记录进展</button>}
+                      </div>}
                     </div>
-                    {task.desc&&<div style={{fontSize:11,color:"#555",marginTop:4,lineHeight:1.6}}>{task.desc}</div>}
-                    {isEditable&&<div style={{display:"flex",gap:4,marginTop:8,flexWrap:"wrap"}}>
-                      {Object.entries(STATUS_LABEL).map(([s,label])=>(
-                        <button key={s} onClick={()=>changeStatus(task.id,s)} style={{padding:"2px 9px",borderRadius:5,cursor:"pointer",fontSize:10,border:task.status===s?`1px solid ${STATUS_COLOR[s].dot}`:"1px solid #1e1e30",background:task.status===s?STATUS_COLOR[s].bg:"transparent",color:task.status===s?STATUS_COLOR[s].text:"#444",fontWeight:task.status===s?600:400}}>{label}</button>
-                      ))}
-                      {linkedLT&&<button onClick={()=>{setLtLogModal(task.linkedLT);setLtLogText(`[来自周任务] ${task.title} 已更新`);}} style={{padding:"2px 9px",borderRadius:5,cursor:"pointer",fontSize:10,border:"1px solid #1a3a5a",background:"#0a1420",color:"#4488aa"}}>📝 记录长期进展</button>}
+                    {isEditable&&<div className="acts" style={{display:"flex",gap:5,opacity:0,transition:"opacity 0.15s",flexShrink:0}}>
+                      <button onClick={()=>openEditWeek(task)} style={{background:"#f5f5fa",border:"1px solid #ebebf5",color:"#888",width:28,height:28,borderRadius:7,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12}}>✏️</button>
+                      <button onClick={()=>deleteWeekTask(task.id)} style={{background:"#fff5f5",border:"1px solid #ffcccc",color:"#cc3333",width:28,height:28,borderRadius:7,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12}}>🗑</button>
                     </div>}
-                  </div>
-                  {isEditable&&<div className="acts" style={{display:"flex",gap:5,opacity:0,transition:"opacity 0.15s",flexShrink:0}}>
-                    <button onClick={()=>openEditWeek(task)} style={{background:"#18183a",border:"1px solid #2a2a50",color:"#6666aa",width:26,height:26,borderRadius:6,cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>✏️</button>
-                    <button onClick={()=>deleteWeekTask(task.id)} style={{background:"#2a1010",border:"1px solid #442020",color:"#aa4444",width:26,height:26,borderRadius:6,cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>🗑</button>
-                  </div>}
-                </div>;
-              })}
-            </div>}
+                  </div>;
+                })}
+              </div>
+            }
           </>}
 
-          {/* LONGTERM VIEW */}
+          {/* ── LONGTERM VIEW ── */}
           {view==="longterm"&&<>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
-              <div style={{fontSize:13,color:"#555"}}>跨周追踪，记录每周进展，随时回溯完整时间线</div>
-              <button onClick={()=>{setShowLTAdd(v=>!v);setEditLT(null);}} style={{...btnStyle(true),fontSize:12,padding:"6px 16px",boxShadow:"0 2px 12px rgba(80,80,255,0.3)"}}>{showLTAdd?"✕ 取消":"+ 新建长期任务"}</button>
+              <div style={{fontSize:13,color:"#aaa"}}>跨周追踪同一任务，记录每周进展，随时回溯完整时间线</div>
+              <button onClick={()=>{setShowLTAdd(v=>!v);setEditLT(null);}} style={primaryBtn({padding:"7px 16px"})}>{showLTAdd?"✕ 取消":"＋ 新建长期任务"}</button>
             </div>
 
-            {(showLTAdd||editLT)&&<div style={{background:"#0d0d22",border:"1px solid #272750",borderRadius:12,padding:18,marginBottom:18,animation:"fi 0.2s ease"}}>
-              <div style={{fontWeight:600,color:"#9999ff",marginBottom:12,fontSize:13}}>{editLT?"✏️ 编辑长期任务":"🏗️ 新建长期任务"}</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:10}}>
-                <input value={ltForm.title} onChange={e=>setLtForm(f=>({...f,title:e.target.value}))} placeholder="任务名称 *" style={{...inpStyle(),gridColumn:"1/-1"}}/>
-                <textarea value={ltForm.desc} onChange={e=>setLtForm(f=>({...f,desc:e.target.value}))} placeholder="目标/背景描述" rows={2} style={{...inpStyle(),gridColumn:"1/-1",resize:"none"}}/>
-                <select value={ltForm.priority} onChange={e=>setLtForm(f=>({...f,priority:e.target.value}))} style={inpStyle()}>
-                  {Object.entries(PRIORITY).map(([k,v])=><option key={k} value={k}>{v} 优先级</option>)}
+            {(showLTAdd||editLT)&&<div style={{background:"#fff",border:"1px solid #ebebf5",borderRadius:12,padding:20,marginBottom:16,boxShadow:"0 2px 12px rgba(0,0,0,0.06)",animation:"fi 0.2s ease"}}>
+              <div style={{fontWeight:600,color:"#1a1a2e",marginBottom:14,fontSize:14}}>{editLT?"编辑长期任务":"新建长期任务"}</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+                <input value={ltForm.title} onChange={e=>setLtForm(f=>({...f,title:e.target.value}))} placeholder="任务名称 *" style={{...inp(),gridColumn:"1/-1"}}/>
+                <textarea value={ltForm.desc} onChange={e=>setLtForm(f=>({...f,desc:e.target.value}))} placeholder="目标/背景描述" rows={2} style={{...inp(),gridColumn:"1/-1",resize:"none"}}/>
+                <select value={ltForm.priority} onChange={e=>setLtForm(f=>({...f,priority:e.target.value}))} style={inp()}>
+                  {Object.entries(PRIORITY_STYLE).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
                 </select>
-                <input value={ltForm.tag} onChange={e=>setLtForm(f=>({...f,tag:e.target.value}))} placeholder="标签（如：产品 / Q2目标）" style={inpStyle()}/>
+                <input value={ltForm.tag} onChange={e=>setLtForm(f=>({...f,tag:e.target.value}))} placeholder="标签（如：产品 / Q2目标）" style={inp()}/>
               </div>
               <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-                <button onClick={()=>{setShowLTAdd(false);setEditLT(null);}} style={btnStyle()}>取消</button>
-                <button onClick={editLT?updateLT:addLT} style={btnStyle(true)}>{editLT?"保存":"创建"}</button>
+                <button onClick={()=>{setShowLTAdd(false);setEditLT(null);}} style={ghostBtn()}>取消</button>
+                <button onClick={editLT?updateLT:addLT} style={primaryBtn()}>{editLT?"保存":"创建"}</button>
               </div>
             </div>}
 
-            {longTerms.length===0?<div style={{textAlign:"center",color:"#2a2a44",padding:"60px 0",fontFamily:"'Space Mono',monospace",fontSize:12,lineHeight:2}}>还没有长期任务<br/><span style={{fontSize:11}}>新建一个，每周记录进展，回溯时一目了然</span></div>:
-            <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              {[...longTerms].sort((a,b)=>({high:0,mid:1,low:2}[a.priority]-{high:0,mid:1,low:2}[b.priority])).map(lt=>{
-                const logsCount=lt.logs?.length||0;
-                const lastLog=lt.logs?.[lt.logs.length-1];
-                const weeksSinceStart=lt.logs?.length>0?[...new Set(lt.logs.map(l=>l.week))].length:0;
-                return <div key={lt.id} className="ltcard" style={{background:lt.status==="done"?"#0a1010":"#0e0e22",border:`1px solid ${lt.status==="done"?"#1a3a22":"#2a2a50"}`,borderRadius:11,padding:"16px 18px",position:"relative"}}>
-                  <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
-                    <div style={{width:10,height:10,borderRadius:"50%",background:lt.status==="done"?"#22994a":"#5555ff",marginTop:5,flexShrink:0,boxShadow:`0 0 8px ${lt.status==="done"?"#22994a99":"#5555ff99"}`}}/>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                        <span style={{fontSize:15,fontWeight:700,color:lt.status==="done"?"#446644":"#cccce0",textDecoration:lt.status==="done"?"line-through":"none",opacity:lt.status==="done"?0.5:1}}>{lt.title}</span>
-                        {lt.tag&&<span style={{fontSize:10,background:"#18183a",border:"1px solid #2a2a50",color:"#6666aa",padding:"1px 8px",borderRadius:20}}>{lt.tag}</span>}
-                        <span style={{fontSize:10,color:"#383850"}}>{PRIORITY[lt.priority]}</span>
-                        {lt.status==="done"&&<span style={{fontSize:10,background:"#0a1e10",border:"1px solid #1a4a22",color:"#44aa66",padding:"1px 8px",borderRadius:20}}>✓ 已完成</span>}
+            {longTerms.length===0
+              ?<div style={{textAlign:"center",color:"#ccc",padding:"60px 0",fontSize:13,lineHeight:2}}>还没有长期任务<br/><span style={{fontSize:12}}>新建一个，每周记录进展，回溯时一目了然</span></div>
+              :<div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {sortPrio(longTerms).map(lt=>{
+                  const logsCount=lt.logs?.length||0;
+                  const lastLog=lt.logs?.[lt.logs.length-1];
+                  const weeksSinceStart=lt.logs?.length>0?[...new Set(lt.logs.map(l=>l.week))].length:0;
+                  const ps=PRIORITY_STYLE[lt.priority];
+                  return <div key={lt.id} className="ltcard" style={{background:"#fff",border:`1px solid ${lt.status==="done"?"#b8e8cc":"#ebebf5"}`,borderLeft:`3px solid ${lt.status==="done"?"#33aa66":"#4f46e5"}`,borderRadius:10,padding:"16px 18px",position:"relative",transition:"box-shadow 0.15s"}}>
+                    <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:6}}>
+                          <span style={{fontSize:15,fontWeight:700,color:"#1a1a2e",textDecoration:lt.status==="done"?"line-through":"none",opacity:lt.status==="done"?0.4:1}}>{lt.title}</span>
+                          {lt.tag&&<span style={{fontSize:11,background:"#f5f5fa",color:"#888",border:"1px solid #ebebf5",padding:"1px 8px",borderRadius:20}}>{lt.tag}</span>}
+                          <span style={{fontSize:11,background:ps.bg,color:ps.color,border:`1px solid ${ps.border}`,padding:"1px 8px",borderRadius:20,fontWeight:500}}>{ps.label}</span>
+                          {lt.status==="done"&&<span style={{fontSize:11,background:"#f0fdf5",color:"#1a7a44",border:"1px solid #b8e8cc",padding:"1px 8px",borderRadius:20,fontWeight:500}}>✓ 已完成</span>}
+                        </div>
+                        {lt.desc&&<div style={{fontSize:12,color:"#999",marginBottom:8,lineHeight:1.6}}>{lt.desc}</div>}
+                        <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:lastLog?10:0}}>
+                          <span style={{fontSize:12,color:"#bbb"}}>📝 {logsCount} 条记录</span>
+                          <span style={{fontSize:12,color:"#bbb"}}>📅 跨越 {weeksSinceStart} 周</span>
+                          {lastLog&&<span style={{fontSize:12,color:"#bbb"}}>🕐 最近更新：{lastLog.weekLabel}</span>}
+                        </div>
+                        {lastLog&&<div style={{background:"#f8f8fc",border:"1px solid #ebebf5",borderRadius:8,padding:"10px 14px",fontSize:12,color:"#888",lineHeight:1.6}}>
+                          <div style={{fontSize:10,color:"#bbb",marginBottom:4,textTransform:"uppercase",letterSpacing:1}}>最新进展 · {lastLog.weekLabel}</div>
+                          {lastLog.text}
+                        </div>}
+                        <div style={{display:"flex",gap:7,marginTop:12,flexWrap:"wrap"}}>
+                          <button onClick={()=>{setLtLogModal(lt.id);setLtLogText("");}} style={{padding:"5px 12px",borderRadius:7,cursor:"pointer",fontSize:12,background:"#f0f5ff",border:"1px solid #dde5ff",color:"#4f46e5",fontWeight:500}}>＋ 记录本周进展</button>
+                          <button onClick={()=>setLtTimelineId(lt.id)} style={{padding:"5px 12px",borderRadius:7,cursor:"pointer",fontSize:12,background:"#f5f5fa",border:"1px solid #ebebf5",color:"#666"}}>📊 查看时间线</button>
+                          <button onClick={()=>toggleLTStatus(lt.id)} style={{padding:"5px 12px",borderRadius:7,cursor:"pointer",fontSize:12,background:lt.status==="done"?"#f5f5fa":"#f0fdf5",border:`1px solid ${lt.status==="done"?"#ebebf5":"#b8e8cc"}`,color:lt.status==="done"?"#888":"#1a7a44"}}>{lt.status==="done"?"↩ 重新追踪":"✓ 标记完成"}</button>
+                        </div>
                       </div>
-                      {lt.desc&&<div style={{fontSize:12,color:"#555",marginTop:5,lineHeight:1.6}}>{lt.desc}</div>}
-                      <div style={{display:"flex",gap:14,marginTop:8,flexWrap:"wrap"}}>
-                        <span style={{fontSize:11,color:"#3a3a5a"}}>📝 {logsCount} 条进展记录</span>
-                        <span style={{fontSize:11,color:"#3a3a5a"}}>📅 跨越 {weeksSinceStart} 周</span>
-                        {lastLog&&<span style={{fontSize:11,color:"#3a3a5a"}}>🕐 最近：{lastLog.weekLabel}</span>}
-                      </div>
-                      {lastLog&&<div style={{marginTop:9,background:"#0a0a1a",border:"1px solid #1e1e3a",borderRadius:7,padding:"8px 12px",fontSize:12,color:"#555",lineHeight:1.5}}>
-                        <span style={{color:"#3a3a5a",fontSize:10}}>最新进展 · {lastLog.weekLabel}</span><br/>{lastLog.text}
-                      </div>}
-                      <div style={{display:"flex",gap:7,marginTop:11,flexWrap:"wrap"}}>
-                        <button onClick={()=>{setLtLogModal(lt.id);setLtLogText("");}} style={{padding:"4px 12px",borderRadius:6,cursor:"pointer",fontSize:11,background:"#0e1e30",border:"1px solid #1e3e5a",color:"#4488bb"}}>+ 记录本周进展</button>
-                        <button onClick={()=>setLtTimelineId(lt.id)} style={{padding:"4px 12px",borderRadius:6,cursor:"pointer",fontSize:11,background:"#0e0e22",border:"1px solid #2a2a4a",color:"#7777aa"}}>📊 查看时间线</button>
-                        <button onClick={()=>toggleLTStatus(lt.id)} style={{padding:"4px 12px",borderRadius:6,cursor:"pointer",fontSize:11,background:"#0a1a14",border:"1px solid #1d5028",color:"#33996a"}}>{lt.status==="done"?"↩ 重新追踪":"✓ 标记完成"}</button>
+                      <div className="ltacts" style={{display:"flex",gap:5,opacity:0,transition:"opacity 0.15s",flexShrink:0}}>
+                        <button onClick={()=>{setEditLT(lt);setLtForm({title:lt.title,desc:lt.desc||"",priority:lt.priority,tag:lt.tag||""});setShowLTAdd(false);}} style={{background:"#f5f5fa",border:"1px solid #ebebf5",color:"#888",width:28,height:28,borderRadius:7,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12}}>✏️</button>
+                        <button onClick={()=>deleteLT(lt.id)} style={{background:"#fff5f5",border:"1px solid #ffcccc",color:"#cc3333",width:28,height:28,borderRadius:7,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12}}>🗑</button>
                       </div>
                     </div>
-                    <div className="ltacts" style={{display:"flex",gap:5,opacity:0,transition:"opacity 0.15s",flexShrink:0}}>
-                      <button onClick={()=>{setEditLT(lt);setLtForm({title:lt.title,desc:lt.desc||"",priority:lt.priority,tag:lt.tag||""});setShowLTAdd(false);}} style={{background:"#18183a",border:"1px solid #2a2a50",color:"#6666aa",width:26,height:26,borderRadius:6,cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>✏️</button>
-                      <button onClick={()=>deleteLT(lt.id)} style={{background:"#2a1010",border:"1px solid #442020",color:"#aa4444",width:26,height:26,borderRadius:6,cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>🗑</button>
-                    </div>
-                  </div>
-                </div>;
-              })}
-            </div>}
+                  </div>;
+                })}
+              </div>
+            }
           </>}
         </div>
       </div>
 
-      {/* Postpone Modal */}
-      {postponeModal&&<div onClick={()=>setPostponeModal(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}}>
-        <div onClick={e=>e.stopPropagation()} style={{background:"#0e0e22",border:"1px solid #3a1a1a",borderRadius:14,padding:26,maxWidth:460,width:"90%",maxHeight:"70vh",overflow:"auto"}}>
-          <div style={{fontWeight:700,color:"#ff7777",fontSize:15,marginBottom:14}}>⏰ 上周推迟的任务 ({postponedPrev.length})</div>
+      {/* ── Modals ── */}
+
+      {/* Postpone modal */}
+      {postponeModal&&<div onClick={()=>setPostponeModal(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.3)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:16,padding:28,maxWidth:460,width:"90%",maxHeight:"75vh",overflow:"auto",boxShadow:"0 8px 40px rgba(0,0,0,0.15)"}}>
+          <div style={{fontWeight:700,color:"#e07800",fontSize:16,marginBottom:16}}>⚠️ 上周推迟的任务 ({postponedPrev.length})</div>
           {postponedPrev.map(t=>(
-            <div key={t.id} style={{background:"#1a0f0f",border:"1px solid #4a2020",borderRadius:8,padding:"11px 14px",marginBottom:8}}>
-              <div style={{color:"#ffaaaa",fontWeight:600,fontSize:13}}>{t.title}</div>
-              {t.desc&&<div style={{color:"#775555",fontSize:11,marginTop:3}}>{t.desc}</div>}
-              <div style={{color:"#553333",fontSize:10,marginTop:3}}>{PRIORITY[t.priority]}{t.tag&&` · ${t.tag}`}</div>
+            <div key={t.id} style={{background:"#fff8f0",border:"1px solid #ffd8a0",borderRadius:10,padding:"12px 16px",marginBottom:8}}>
+              <div style={{color:"#1a1a2e",fontWeight:600,fontSize:13}}>{t.title}</div>
+              {t.desc&&<div style={{color:"#999",fontSize:12,marginTop:3}}>{t.desc}</div>}
+              <div style={{color:"#e07800",fontSize:11,marginTop:4}}>{PRIORITY_STYLE[t.priority].label}{t.tag&&` · ${t.tag}`}</div>
             </div>
           ))}
-          <div style={{display:"flex",gap:10,marginTop:14}}>
-            <button onClick={()=>setPostponeModal(false)} style={{flex:1,...btnStyle()}}>稍后处理</button>
-            <button onClick={carryOver} style={{flex:1,...btnStyle(true),background:"#993333"}}>结转到本周 →</button>
+          <div style={{display:"flex",gap:10,marginTop:16}}>
+            <button onClick={()=>setPostponeModal(false)} style={{flex:1,...ghostBtn()}}>稍后处理</button>
+            <button onClick={carryOver} style={{flex:1,...primaryBtn(),background:"#f57c00"}}>结转到本周 →</button>
           </div>
         </div>
       </div>}
 
-      {/* Log Modal */}
-      {ltLogModal&&ltLogTarget&&<div onClick={()=>setLtLogModal(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}}>
-        <div onClick={e=>e.stopPropagation()} style={{background:"#0e0e22",border:"1px solid #2a2a50",borderRadius:14,padding:26,maxWidth:480,width:"90%"}}>
-          <div style={{fontWeight:700,color:"#9999ff",fontSize:15,marginBottom:4}}>📝 记录进展</div>
-          <div style={{fontSize:12,color:"#555",marginBottom:14}}>「{ltLogTarget.title}」· {wLabel(activeWeek)}</div>
-          <textarea value={ltLogText} onChange={e=>setLtLogText(e.target.value)} placeholder="这周做了什么？遇到什么问题？下步计划？" rows={4} style={{...inpStyle(),resize:"none",marginBottom:12}}/>
+      {/* Log modal */}
+      {ltLogModal&&ltLogTarget&&<div onClick={()=>setLtLogModal(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.3)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:16,padding:28,maxWidth:480,width:"90%",boxShadow:"0 8px 40px rgba(0,0,0,0.15)"}}>
+          <div style={{fontWeight:700,color:"#1a1a2e",fontSize:15,marginBottom:4}}>记录本周进展</div>
+          <div style={{fontSize:12,color:"#aaa",marginBottom:16}}>「{ltLogTarget.title}」· {wLabel(activeWeek)}</div>
+          <textarea value={ltLogText} onChange={e=>setLtLogText(e.target.value)} placeholder="这周做了什么？遇到什么问题？下步计划？" rows={4} style={{...inp(),resize:"none",marginBottom:14}}/>
           <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-            <button onClick={()=>setLtLogModal(null)} style={btnStyle()}>取消</button>
-            <button onClick={()=>addLTLog(ltLogModal)} style={btnStyle(true)}>保存进展</button>
+            <button onClick={()=>setLtLogModal(null)} style={ghostBtn()}>取消</button>
+            <button onClick={()=>addLTLog(ltLogModal)} style={primaryBtn()}>保存进展</button>
           </div>
         </div>
       </div>}
 
-      {/* Timeline Modal */}
-      {ltTimelineId&&ltTimeline&&<div onClick={()=>setLtTimelineId(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.82)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}}>
-        <div onClick={e=>e.stopPropagation()} style={{background:"#0c0c1e",border:"1px solid #2a2a50",borderRadius:14,padding:26,maxWidth:560,width:"90%",maxHeight:"80vh",overflow:"auto"}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
+      {/* Timeline modal */}
+      {ltTimelineId&&ltTimeline&&<div onClick={()=>setLtTimelineId(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.3)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:16,padding:28,maxWidth:560,width:"90%",maxHeight:"80vh",overflow:"auto",boxShadow:"0 8px 40px rgba(0,0,0,0.15)"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
             <div>
-              <div style={{fontWeight:700,color:"#aaaaff",fontSize:15}}>📊 完整时间线</div>
-              <div style={{fontSize:12,color:"#555",marginTop:2}}>「{ltTimeline.title}」</div>
+              <div style={{fontWeight:700,color:"#1a1a2e",fontSize:15}}>完整时间线</div>
+              <div style={{fontSize:12,color:"#aaa",marginTop:2}}>「{ltTimeline.title}」</div>
             </div>
-            <button onClick={()=>setLtTimelineId(null)} style={{background:"transparent",border:"none",color:"#555",cursor:"pointer",fontSize:20,lineHeight:1}}>✕</button>
+            <button onClick={()=>setLtTimelineId(null)} style={{background:"#f5f5fa",border:"none",color:"#888",width:30,height:30,borderRadius:8,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
           </div>
-          {(!ltTimeline.logs||ltTimeline.logs.length===0)?
-            <div style={{textAlign:"center",color:"#333",padding:"40px 0",fontFamily:"'Space Mono',monospace",fontSize:12}}>还没有进展记录<br/><span style={{fontSize:10}}>去「记录本周进展」添加第一条</span></div>:
-            <div style={{position:"relative"}}>
-              <div style={{position:"absolute",left:16,top:0,bottom:0,width:1,background:"#1e1e3a"}}/>
-              <div style={{display:"flex",flexDirection:"column",gap:0}}>
-                {[...ltTimeline.logs].reverse().map(log=>(
-                  <div key={log.id} style={{display:"flex",gap:16,paddingBottom:16}}>
-                    <div style={{width:33,flexShrink:0,display:"flex",justifyContent:"center"}}>
-                      <div style={{width:10,height:10,borderRadius:"50%",background:"#5555ff",border:"2px solid #0c0c1e",boxShadow:"0 0 8px #5555ff88",marginTop:4,zIndex:1}}/>
-                    </div>
-                    <div style={{flex:1,background:"#0e0e22",border:"1px solid #1e1e3a",borderRadius:8,padding:"10px 14px"}}>
-                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-                        <span style={{fontSize:10,color:"#4444aa",fontFamily:"'Space Mono',monospace"}}>{log.weekLabel}</span>
-                        <button onClick={()=>deleteLTLog(ltTimeline.id,log.id)} style={{background:"transparent",border:"none",color:"#333",cursor:"pointer",fontSize:11}}>✕</button>
-                      </div>
-                      <div style={{fontSize:12,color:"#999",lineHeight:1.7,whiteSpace:"pre-wrap"}}>{log.text}</div>
-                    </div>
+
+          {(!ltTimeline.logs||ltTimeline.logs.length===0)
+            ?<div style={{textAlign:"center",color:"#ccc",padding:"40px 0",fontSize:13}}>还没有进展记录<br/><span style={{fontSize:11}}>去「记录本周进展」添加第一条</span></div>
+            :<div style={{position:"relative",paddingLeft:8}}>
+              <div style={{position:"absolute",left:20,top:0,bottom:0,width:2,background:"#ebebf5",borderRadius:2}}/>
+              {[...ltTimeline.logs].reverse().map(log=>(
+                <div key={log.id} style={{display:"flex",gap:16,paddingBottom:16,paddingLeft:12}}>
+                  <div style={{width:20,flexShrink:0,display:"flex",justifyContent:"center",position:"relative"}}>
+                    <div style={{width:10,height:10,borderRadius:"50%",background:"#4f46e5",border:"2px solid #fff",boxShadow:"0 0 0 2px #e0e0f5",marginTop:5,zIndex:1}}/>
                   </div>
-                ))}
-              </div>
+                  <div style={{flex:1,background:"#f8f8fc",border:"1px solid #ebebf5",borderRadius:10,padding:"12px 14px"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                      <span style={{fontSize:11,color:"#4f46e5",fontWeight:600}}>{log.weekLabel}</span>
+                      <button onClick={()=>deleteLTLog(ltTimeline.id,log.id)} style={{background:"transparent",border:"none",color:"#ccc",cursor:"pointer",fontSize:12,lineHeight:1}}>✕</button>
+                    </div>
+                    <div style={{fontSize:13,color:"#555",lineHeight:1.7,whiteSpace:"pre-wrap"}}>{log.text}</div>
+                  </div>
+                </div>
+              ))}
             </div>
           }
-          <div style={{marginTop:14,paddingTop:14,borderTop:"1px solid #1a1a2a"}}>
-            <textarea value={ltLogText} onChange={e=>setLtLogText(e.target.value)} placeholder={`补充进展（记录到${wLabel(activeWeek).replace("📅 ","").replace("⏮ ","")}）`} rows={2} style={{...inpStyle(),resize:"none",marginBottom:8}}/>
+
+          <div style={{marginTop:16,paddingTop:16,borderTop:"1px solid #ebebf5"}}>
+            <textarea value={ltLogText} onChange={e=>setLtLogText(e.target.value)} placeholder={`补充进展（${wLabel(activeWeek)}）`} rows={2} style={{...inp(),resize:"none",marginBottom:10}}/>
             <div style={{display:"flex",justifyContent:"flex-end"}}>
-              <button onClick={()=>addLTLog(ltTimeline.id)} style={btnStyle(true)}>+ 添加进展</button>
+              <button onClick={()=>addLTLog(ltTimeline.id)} style={primaryBtn()}>＋ 添加进展</button>
             </div>
           </div>
         </div>
