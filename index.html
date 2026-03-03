@@ -150,6 +150,11 @@ async function dWrite(tok, name, data) {
     throw new Error("write " + r.status + " " + err);
   }
 }
+
+const inp=(x={})=>({background:"#fff",border:"1.5px solid #e0e0ee",borderRadius:8,padding:"9px 12px",color:"#1a1a2e",fontSize:13,outline:"none",width:"100%",...x});
+const pb=(x={})=>({background:"#4f46e5",border:"none",color:"#fff",padding:"8px 18px",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600,...x});
+const gb=(x={})=>({background:"transparent",border:"1.5px solid #e0e0ee",color:"#888",padding:"7px 16px",borderRadius:8,cursor:"pointer",fontSize:13,...x});
+
 function App(){
   // ── state ──
   const [auth,setAuth]=useState("idle"); // idle|loading|ok|error
